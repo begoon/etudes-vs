@@ -1,4 +1,5 @@
 from collections import Counter
+from functools import reduce
 from pathlib import Path
 from itertools import batched
 import random
@@ -26,7 +27,7 @@ def nicer(s: str) -> str:
 def liner(v: list[str]) -> str:
     return "".join(v)
 
-original = Path("text-ru.txt").read_text()
+original = Path("text-ru-2.txt").read_text()
 
 clean = liner(map(str.lower, filter(lambda x: x.isalpha(), original)))
 
@@ -46,36 +47,41 @@ print(nicer(encrypted), "\n")
 decryted_check = encrypt(encrypted, randomized_alphabet, ALPHABET)
 assert clean == decryted_check
 
-letters_counts = Counter(ALPHABET)
-print(letters_counts, "\n")
-letters_counts_tuples = letters_counts.most_common(len(letters_counts))
-print(letters_counts_tuples, "\n")
-
-
 encrypted_counters = Counter(encrypted)
+print("encrypted_counters:")
 print(encrypted_counters, len(encrypted_counters), "\n")
+
 encrypted_counters_flat = encrypted_counters.most_common(len(encrypted_counters))
+print("encrypted_counters_flat:")
 print(encrypted_counters_flat, "\n")
-encrypted_counters_normalized = [(k, v / len(encrypted)) for k, v in encrypted_counters.items()]
+
+encrypted_counters_normalized = [(k, v / len(encrypted)) for k, v in encrypted_counters_flat]
+print("encrypted_counters_normalized:")
 print(encrypted_counters_normalized, "\n")
 
 missing_letters = set(ALPHABET) - set([x[0] for x in encrypted_counters_normalized])
 print(missing_letters, "\n")
-for l in missing_letters:
-    encrypted_counters_normalized.append((l, 0))
+
+for v in missing_letters:
+    encrypted_counters_normalized.append((v, 0))
 assert len(encrypted_counters_normalized) == len(ALPHABET)
 
-encrypted_counters_normalized_sorted = sorted(encrypted_counters_normalized, key=lambda x: x[1], reverse=True)
-print(encrypted_counters_normalized_sorted, "\n")
+print(encrypted_counters_normalized, "\n")
+print(RA, "\n")
 
-recovered_alphabet = liner([x[0] for x in encrypted_counters_normalized_sorted])
-print(recovered_alphabet)
-print(randomized_alphabet, "\n")
+recovered_alphabet = liner([x[0] for x in encrypted_counters_normalized])
+print(ALPHABET)
+print(randomized_alphabet)
+print(recovered_alphabet, "\n")
+
+for z in zip(RA, encrypted_counters_normalized):
+    print(z, abs(z[0][1] - z[1][1]))
+
 
 decryted = encrypt(encrypted, recovered_alphabet, ALPHABET)
 
 diffs = sum([1 for i in range(len(clean)) if clean[i] != decryted[i]])
-print(diffs, len(clean), diffs / len(clean), "\n")
+print(diffs, len(clean), diffs / len(clean) * 100, "\n")
 
 print(nicer(decryted), "\n")
 
