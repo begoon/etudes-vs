@@ -4,41 +4,49 @@ from itertools import batched
 import random
 from ra import RA
 
-def encrypt(s :str, alphabet: str) -> str:
-    assert len(ALPHABET_LETTERS) == 33
-    if len(alphabet) < len(ALPHABET_LETTERS):
-        print(f"warning: {len(alphabet)=} is too short")
+def LETTER_INDEX(c: str) -> int:
+    return ALPHABET.index(c)
+
+def encrypt(s :str, plain_alphabet: str, mixed_alphabet: str) -> str:
     r = ""
     for c in s:
-        i = ALPHABET_LETTERS.index(c)
-        if i >= len(alphabet):
+        try:
+            i = plain_alphabet.index(c)
+        except ValueError:
+            i = -1
+        if i == -1 or i >= len(mixed_alphabet):
             r += "."
         else:
-            r += alphabet[i]
+            r += mixed_alphabet[i]
     return r
 
-original = Path("text-ru.txt").read_text()
-clean = "".join(map(str.lower, filter(lambda x: x.isalpha(), original)))
-
 def nicer(s: str) -> str:
-    return "\n".join([" ".join(x) for x in batched(["".join(v) for v in batched(s, 5)], 16)])
+    return "\n".join([" ".join(x) for x in batched(["".join(v) for v in batched(s, 5)], 24)])
 
 def liner(v: list[str]) -> str:
     return "".join(v)
 
-print(nicer(clean))
+original = Path("text-ru.txt").read_text()
 
-ALPHABET_LETTERS = [x[0] for x in RA]
-print(liner(ALPHABET_LETTERS), "\n")
+clean = liner(map(str.lower, filter(lambda x: x.isalpha(), original)))
 
-randomized_letters = ALPHABET_LETTERS.copy()
-random.shuffle(randomized_letters)
-print(liner(randomized_letters), "\n")
+print(clean, "\n")
 
-encrypted = encrypt(clean, liner(randomized_letters))
-print(nicer(encrypted), end="\n\n")
+ALPHABET = liner([x[0] for x in RA])
+print(ALPHABET)
 
-letters_counts = Counter(ALPHABET_LETTERS)
+randomized_alphabet = [v for v in ALPHABET]
+random.shuffle(randomized_alphabet)
+randomized_alphabet = liner(randomized_alphabet)
+print(randomized_alphabet, "\n")
+
+encrypted = encrypt(clean, ALPHABET, randomized_alphabet)
+print(nicer(encrypted), "\n")
+
+decryted_check = encrypt(encrypted, randomized_alphabet, ALPHABET)
+assert clean == decryted_check
+
+letters_counts = Counter(ALPHABET)
 print(letters_counts, "\n")
 letters_counts_tuples = letters_counts.most_common(len(letters_counts))
 print(letters_counts_tuples, "\n")
@@ -50,16 +58,25 @@ encrypted_counters_flat = encrypted_counters.most_common(len(encrypted_counters)
 print(encrypted_counters_flat, "\n")
 encrypted_counters_normalized = [(k, v / len(encrypted)) for k, v in encrypted_counters.items()]
 print(encrypted_counters_normalized, "\n")
+
+missing_letters = set(ALPHABET) - set([x[0] for x in encrypted_counters_normalized])
+print(missing_letters, "\n")
+for l in missing_letters:
+    encrypted_counters_normalized.append((l, 0))
+assert len(encrypted_counters_normalized) == len(ALPHABET)
+
 encrypted_counters_normalized_sorted = sorted(encrypted_counters_normalized, key=lambda x: x[1], reverse=True)
 print(encrypted_counters_normalized_sorted, "\n")
 
-print(RA, "\n")
+recovered_alphabet = liner([x[0] for x in encrypted_counters_normalized_sorted])
+print(recovered_alphabet)
+print(randomized_alphabet, "\n")
 
-recovered_letters = [x[0] for x in encrypted_counters_normalized_sorted]
-recovered_alphabet = liner(recovered_letters)
-print(recovered_alphabet, "\n")
+decryted = encrypt(encrypted, recovered_alphabet, ALPHABET)
 
-# print("".join(randomized_letters), "\n")
+diffs = sum([1 for i in range(len(clean)) if clean[i] != decryted[i]])
+print(diffs, len(clean), diffs / len(clean), "\n")
 
-decryted = encrypt(encrypted, recovered_alphabet)
-print(nicer(decryted))
+print(nicer(decryted), "\n")
+
+print(nicer(clean))
