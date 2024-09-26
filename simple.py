@@ -1,12 +1,17 @@
 from collections import Counter
 from functools import reduce
+import locale
 from pathlib import Path
 from itertools import batched
 import random
 from ra import RA
 
-def LETTER_INDEX(c: str) -> int:
-    return ALPHABET.index(c)
+locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8') 
+
+RA_dict = dict(RA)
+print(RA_dict)
+
+RA_ordered = sorted(RA, key=lambda v: v[0])
 
 def encrypt(s :str, plain_alphabet: str, mixed_alphabet: str) -> str:
     r = ""
@@ -14,7 +19,8 @@ def encrypt(s :str, plain_alphabet: str, mixed_alphabet: str) -> str:
         try:
             i = plain_alphabet.index(c)
         except ValueError:
-            i = -1
+            print(c)
+            raise
         if i == -1 or i >= len(mixed_alphabet):
             r += "."
         else:
@@ -27,10 +33,11 @@ def nicer(s: str) -> str:
 def liner(v: list[str]) -> str:
     return "".join(v)
 
-original = Path("text-ru-2.txt").read_text()
+original = Path("text-ru.txt").read_text()
 
-clean = liner(map(str.lower, filter(lambda x: x.isalpha(), original)))
+clean = liner(filter(lambda x: x in RA_dict, map(lambda x: x.lower(), original)))
 
+print("clean:")
 print(clean, "\n")
 
 ALPHABET = liner([x[0] for x in RA])
@@ -44,8 +51,15 @@ print(randomized_alphabet, "\n")
 encrypted = encrypt(clean, ALPHABET, randomized_alphabet)
 print(nicer(encrypted), "\n")
 
+def cmp(a: str, b: str) -> int:
+    assert len(a) == len(b), f"{len(a)=} != {len(b)=}"
+    for i, [x, y] in enumerate(zip(a, b)):
+        assert x == y, f"{i}: {x} != {y}"
+    return 0
+
 decryted_check = encrypt(encrypted, randomized_alphabet, ALPHABET)
-assert clean == decryted_check
+assert clean == decryted_check, cmp(clean, decryted_check)
+
 
 encrypted_counters = Counter(encrypted)
 print("encrypted_counters:")
@@ -80,9 +94,8 @@ for z in zip(RA, encrypted_counters_normalized):
 
 decryted = encrypt(encrypted, recovered_alphabet, ALPHABET)
 
-diffs = sum([1 for i in range(len(clean)) if clean[i] != decryted[i]])
-print(diffs, len(clean), diffs / len(clean) * 100, "\n")
+diff = sum([1 for i in range(len(clean)) if clean[i] != decryted[i]])
+print(f"{diff=}", f"{len(clean)=}", f"{diff/len(clean)*100=}", "\n")
 
 print(nicer(decryted), "\n")
-
 print(nicer(clean))
