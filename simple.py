@@ -6,50 +6,83 @@ from itertools import batched
 import random
 from ra import RA
 
+TEXT ="text-ru-XXX.txt"
+
 locale.setlocale(locale.LC_ALL, 'ru_RU.UTF-8') 
 
 RA_dict = dict(RA)
-print(RA_dict)
-
 RA_ordered = sorted(RA, key=lambda v: v[0])
 
-def encrypt(s :str, plain_alphabet: str, mixed_alphabet: str) -> str:
+def substitution(s: str, from_alphabet: str, to_alphabet: str) -> str:
     r = ""
     for c in s:
-        try:
-            i = plain_alphabet.index(c)
-        except ValueError:
-            print(c)
-            raise
-        if i == -1 or i >= len(mixed_alphabet):
-            r += "."
-        else:
-            r += mixed_alphabet[i]
+        i = from_alphabet.find(c)
+        assert i >= 0, f"{c=} not in {from_alphabet=}"
+        assert i < len(to_alphabet), f"{c=} {i=}, {len(to_alphabet)=}"
+        r += to_alphabet[i]
     return r
 
-def nicer(s: str) -> str:
+def table5(s: str) -> str:
     return "\n".join([" ".join(x) for x in batched(["".join(v) for v in batched(s, 5)], 24)])
 
-def liner(v: list[str]) -> str:
+def to_string(v: list[str]) -> str:
     return "".join(v)
 
-original = Path("text-ru.txt").read_text()
+def println(v: str | int | float, title: str = None, width: int = 0, nl: bool = False):
+    title_ = f"{title}: " if title else ""
+    if isinstance(v, (int, float)):
+        print(f"{title_:>{width}} {v}")
+    else:
+        print(f"{title_:>{width}}({len(v)}) {v[:100]}")
+    if nl:
+        print()
 
-clean = liner(filter(lambda x: x in RA_dict, map(lambda x: x.lower(), original)))
+def print5(s: str, title: str):
+    print(f"{title}: {len(s)=}")
+    s = s if len(s) < 1000 else s[:500] + "..."
+    print(table5(s))
+    print()
 
-print("clean:")
-print(clean, "\n")
 
-ALPHABET = liner([x[0] for x in RA])
-print(ALPHABET)
+AZ = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+def COUNT(s: str) -> list[tuple[str, int, float]]:
+    counters = Counter(s)
+    counters_flat = counters.most_common(len(counters))
+    counters_normalized = [(k, v, v / len(s)) for k, v in counters_flat]
+    missing = set(AZ) - set([x[0] for x in counters_normalized])
+    counters_normalized.extend([(k, 0, 0) for k in missing])
+    assert len(counters_normalized) == len(AZ), f"{len(counters_normalized)=} != {len(AZ)=}"
 
-randomized_alphabet = [v for v in ALPHABET]
-random.shuffle(randomized_alphabet)
-randomized_alphabet = liner(randomized_alphabet)
-print(randomized_alphabet, "\n")
+    total_count = sum([x[1] for x in counters_normalized])
+    total_sum = sum([x[2] for x in counters_normalized])
 
-encrypted = encrypt(clean, ALPHABET, randomized_alphabet)
-print(nicer(encrypted), "\n")
+    chi = CHI_SQUARE(s)
+    ci = COINCIDENCE(s)
+    print(f'length={len(s)} chi={chi} ci={ci}')
+    assert total_count == len(s), f"{total_count=} != {len(s)=}"
+    assert total_sum == 1.0, f"{total_sum=} != 1.0"
+
+    for batch in batched(counters_normalized, 4):
+        print(" | ".join([f"{l} {c: 7} {f:0.6f}" for l, c, f in batch]))
+    print()
+
+    return counters_normalized
+
+def CHI_SQUARE(s: str) -> float:
+    counters = Counter(s)
+    counters_flat = counters.most_common(len(counters))
+    diffs = []
+    for k, v in counters_flat:
+        v_expected = len(s) * RA_dict[k]
+        False and print(f"{k=} {v=} {v_expected=}")
+        diffs.append((v - v_expected) ** 2 / v_expected)
+    return sum(diffs)
+
+def COINCIDENCE(s: str) -> float:
+    counters = Counter(s)
+    counters_flat = counters.most_common(len(counters))
+    counters_normalized = [(k, v, v / len(s)) for k, v in counters_flat]
+    return sum([v * (v - 1) for k, v, p in counters_normalized]) / (len(s) * (len(s) - 1))
 
 def cmp(a: str, b: str) -> int:
     assert len(a) == len(b), f"{len(a)=} != {len(b)=}"
@@ -57,45 +90,63 @@ def cmp(a: str, b: str) -> int:
         assert x == y, f"{i}: {x} != {y}"
     return 0
 
-decryted_check = encrypt(encrypted, randomized_alphabet, ALPHABET)
-assert clean == decryted_check, cmp(clean, decryted_check)
+# -------------------------------
+
+ALPHABET = to_string([x[0] for x in RA])
+println(ALPHABET, "ALPHABET", nl=True)
+
+original = Path(TEXT).read_text()
+
+plain = to_string(filter(lambda x: x in RA_dict, map(lambda x: x.lower(), original)))
+
+print5(plain, "plain")
+
+print("clean:")
+plain_counts = COUNT(plain)
+
+randomized_alphabet = [v for v in ALPHABET]
+# random.shuffle(randomized_alphabet)
+randomized_alphabet = to_string(randomized_alphabet)
+
+println(ALPHABET, "plain alphabet", 22)
+println(randomized_alphabet, "randomized alphabet", 22)
+print()
+
+encrypted = substitution(plain, ALPHABET, randomized_alphabet)
+print5(encrypted, "encrypted")
+
+println(COINCIDENCE(plain), "clean coincidence", 23)
+println(COINCIDENCE(encrypted), "encrypted coincidence", 23)
+print()
+
+decryted_check = substitution(encrypted, randomized_alphabet, ALPHABET)
+assert plain == decryted_check, cmp(plain, decryted_check)
+
+encrypted_counters = COUNT(encrypted)
+
+recovered_alphabet = to_string([l for l, c, f in encrypted_counters])
+
+println(ALPHABET, "plain alphabet", 22)
+println(randomized_alphabet, "randomized alphabet", 22)
+println(recovered_alphabet, "recovered alphabet", 22)
+mismatches = "".join(['^' if a != b else ' ' for a, b in zip(randomized_alphabet, recovered_alphabet)])
+println(mismatches, "mismatches", 22)
+print()
+
+for i, [[ra_l, ra_f], [l, c, f]] in enumerate(zip(RA, encrypted_counters), 1):
+    mismatch = "❌" if ra_l != l else "✅"
+    print(f"{i:2}:", f"{ra_l} {ra_f:0.6f}", "~>", f"{l} {f:0.6f} ({c:5})", "-", f"±{abs(ra_f - f):0.6f}", mismatch)
+print()
 
 
-encrypted_counters = Counter(encrypted)
-print("encrypted_counters:")
-print(encrypted_counters, len(encrypted_counters), "\n")
+decryted = substitution(encrypted, recovered_alphabet, ALPHABET)
 
-encrypted_counters_flat = encrypted_counters.most_common(len(encrypted_counters))
-print("encrypted_counters_flat:")
-print(encrypted_counters_flat, "\n")
-
-encrypted_counters_normalized = [(k, v / len(encrypted)) for k, v in encrypted_counters_flat]
-print("encrypted_counters_normalized:")
-print(encrypted_counters_normalized, "\n")
-
-missing_letters = set(ALPHABET) - set([x[0] for x in encrypted_counters_normalized])
-print(missing_letters, "\n")
-
-for v in missing_letters:
-    encrypted_counters_normalized.append((v, 0))
-assert len(encrypted_counters_normalized) == len(ALPHABET)
-
-print(encrypted_counters_normalized, "\n")
-print(RA, "\n")
-
-recovered_alphabet = liner([x[0] for x in encrypted_counters_normalized])
-print(ALPHABET)
-print(randomized_alphabet)
-print(recovered_alphabet, "\n")
-
-for z in zip(RA, encrypted_counters_normalized):
-    print(z, abs(z[0][1] - z[1][1]))
+print("decrypted coincidence:", COINCIDENCE(decryted))
 
 
-decryted = encrypt(encrypted, recovered_alphabet, ALPHABET)
+diff = sum([1 for i in range(len(plain)) if plain[i] != decryted[i]])
+print(f"{diff=}", f"{len(plain)=}", f"{diff/len(plain)*100=}", "\n")
 
-diff = sum([1 for i in range(len(clean)) if clean[i] != decryted[i]])
-print(f"{diff=}", f"{len(clean)=}", f"{diff/len(clean)*100=}", "\n")
-
-print(nicer(decryted), "\n")
-print(nicer(clean))
+if len(plain) < 2000:
+    print(table5(decryted), "\n")
+    print(table5(plain))
